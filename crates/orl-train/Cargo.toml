@@ -1,0 +1,24 @@
+[package]
+name = "orl-train"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+cuda = ["candle-core/cuda", "candle-nn/cuda", "orl-model/cuda", "orl-algo/cuda"]
+
+[dependencies]
+orl-data = { path = "../orl-data" }
+orl-model = { path = "../orl-model" }
+orl-algo = { path = "../orl-algo" }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+tokenizers = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
+indicatif = { workspace = true }

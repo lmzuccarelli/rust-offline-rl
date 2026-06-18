@@ -1,0 +1,50 @@
+[package]
+name = "rust-offline-rl"
+version = "0.1.0"
+edition = "2024"
+authors = ["Luigi Mario Zuccarelli<>luigizuccarelli@gmail.com"]
+
+
+[workspace]
+members = ["crates/*"]
+resolver = "2"
+
+[workspace.dependencies]
+candle-core = { version = "0.10" }
+candle-nn = { version = "0.10" }
+candle-transformers = { version = "0.10" }
+tokenizers = "0.21"
+hf-hub = "0.4"
+safetensors = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+rand = "0.9"
+indicatif = "0.17"
+
+[features]
+default = []
+cuda = [
+    "candle-core/cuda",
+    "orl-model/cuda",
+    "orl-algo/cuda",
+    "orl-train/cuda",
+]
+
+[dependencies]
+orl-data = { path = "crates/orl-data" }
+orl-model = { path = "crates/orl-model" }
+orl-algo = { path = "crates/orl-algo" }
+orl-train = { path = "crates/orl-train" }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+candle-core = { workspace = true }

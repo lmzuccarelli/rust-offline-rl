@@ -1,0 +1,18 @@
+[package]
+name = "orl-algo"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+cuda = ["candle-core/cuda", "candle-nn/cuda", "orl-model/cuda"]
+
+[dependencies]
+orl-data = { path = "../orl-data" }
+orl-model = { path = "../orl-model" }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rand = { workspace = true }
