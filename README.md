@@ -4,17 +4,12 @@ Complete Offline RL Solution
 
 ## Project structure — Cargo workspace with 4 crates:
 
-  ┌───────────┬───────────────────────────────────────────────┬───────────────────────────────────────────────────────────┐
-  │   Crate   │                    Purpose                    │                         Key files                         │
-  ├───────────┼───────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
-  │ orl-data  │ Data ingestion, replay buffer, tokenization   │ ingest.rs, trajectory.rs, replay_buffer.rs, preference.rs │
-  ├───────────┼───────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
-  │ orl-model │ Model loading, training wrappers, value heads │ loader.rs, causal_lm.rs, value_head.rs                    │
-  ├───────────┼───────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
-  │ orl-algo  │ Three RL algorithms                           │ traits.rs, rw_sft.rs, dpo.rs, ilql.rs                     │
-  ├───────────┼───────────────────────────────────────────────┼───────────────────────────────────────────────────────────┤
-  │ orl-train │ Training loop, checkpointing, evaluation      │ trainer.rs, checkpoint.rs, eval.rs, scheduler.rs          │
-  └───────────┴───────────────────────────────────────────────┴───────────────────────────────────────────────────────────┘
+| Crate | Purpose | Key files |
+|:-----:|:-------:|:---------:|
+| orl-data | Data ingestion, replay buffer, tokenization | ingest.rs, trajectory.rs, replay_buffer.rs, preference.rs |
+| orl-model | Model loading, training wrappers, value heads | loader.rs, causal_lm.rs, value_head.rs |
+| orl-algo  | Three RL algorithms | traits.rs, rw_sft.rs, dpo.rs, ilql.rs |
+| orl-train | Training loop, checkpointing, evaluation | trainer.rs, checkpoint.rs, eval.rs, scheduler.rs |
 
 ##  Three offline RL algorithms:
   - Reward-Weighted SFT — cross-entropy weighted by exp(reward/temp), simplest baseline
