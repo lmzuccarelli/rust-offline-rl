@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use candle_core::Device;
+use candle_core::{Device, Result as CandleResult, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarMap};
+
+use crate::paged_adamw::{PagedAdamW, ParamsPagedAdamW};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::Deserialize;
@@ -30,6 +32,8 @@ pub struct ModelConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TrainingConfig {
     pub algorithm: String,
+    #[serde(default = "default_optimizer")]
+    pub optimizer: String,
     pub num_epochs: usize,
     pub batch_size: usize,
     pub gradient_accumulation_steps: usize,
@@ -42,6 +46,10 @@ pub struct TrainingConfig {
     pub seed: u64,
     pub adamw: AdamWConfig,
     pub scheduler: SchedulerConfig,
+}
+
+fn default_optimizer() -> String {
+    "paged_adamw".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -71,6 +79,27 @@ pub struct FullConfig {
     pub rw_sft: RwSftConfig,
     #[serde(default)]
     pub ilql: IlqlConfig,
+}
+
+enum OptimizerWrapper {
+    Standard(AdamW),
+    Paged(PagedAdamW),
+}
+
+impl OptimizerWrapper {
+    fn set_learning_rate(&mut self, lr: f64) {
+        match self {
+            Self::Standard(o) => o.set_learning_rate(lr),
+            Self::Paged(o) => o.set_learning_rate(lr),
+        }
+    }
+
+    fn backward_step(&mut self, loss: &Tensor) -> CandleResult<()> {
+        match self {
+            Self::Standard(o) => o.backward_step(loss),
+            Self::Paged(o) => o.backward_step(loss),
+        }
+    }
 }
 
 pub fn load_config(path: &Path) -> anyhow::Result<FullConfig> {
@@ -140,15 +169,6 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
     }
     tracing::info!("pretrained weights loaded");
 
-    // Setup optimizer
-    let params = ParamsAdamW {
-        lr: config.training.learning_rate,
-        beta1: config.training.adamw.beta1,
-        beta2: config.training.adamw.beta2,
-        eps: config.training.adamw.eps,
-        weight_decay: config.training.adamw.weight_decay,
-    };
-
     let mut all_vars = varmap.all_vars();
 
     // Create algorithm
@@ -182,7 +202,31 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
         other => anyhow::bail!("unknown algorithm: {}", other),
     };
 
-    let mut optimizer = AdamW::new(all_vars, params)?;
+    let mut optimizer = match config.training.optimizer.as_str() {
+        "adamw" => {
+            let params = ParamsAdamW {
+                lr: config.training.learning_rate,
+                beta1: config.training.adamw.beta1,
+                beta2: config.training.adamw.beta2,
+                eps: config.training.adamw.eps,
+                weight_decay: config.training.adamw.weight_decay,
+            };
+            tracing::info!("using standard AdamW optimizer");
+            OptimizerWrapper::Standard(AdamW::new(all_vars, params)?)
+        }
+        "paged_adamw" => {
+            let params = ParamsPagedAdamW {
+                lr: config.training.learning_rate,
+                beta1: config.training.adamw.beta1,
+                beta2: config.training.adamw.beta2,
+                eps: config.training.adamw.eps,
+                weight_decay: config.training.adamw.weight_decay,
+            };
+            tracing::info!("using paged AdamW optimizer (moments on CPU)");
+            OptimizerWrapper::Paged(PagedAdamW::new(all_vars, params)?)
+        }
+        other => anyhow::bail!("unknown optimizer: {} (expected 'adamw' or 'paged_adamw')", other),
+    };
 
     // LR scheduler
     let total_steps = config.training.max_steps;

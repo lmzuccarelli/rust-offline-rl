@@ -1,5 +1,5 @@
 [model]
-model_id = "Qwen/Qwen3-4B"
+model_id = "Qwen/Qwen3-1.7B"
 dtype = "bf16"
 max_prompt_length = 2048
 max_response_length = 4096
@@ -12,6 +12,7 @@ min_reward = -1.0
 
 [training]
 algorithm = "rw_sft"
+optimizer = "paged_adamw"
 num_epochs = 3
 batch_size = 1
 gradient_accumulation_steps = 8
