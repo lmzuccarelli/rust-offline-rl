@@ -60,11 +60,11 @@ impl Ilql {
         config: IlqlConfig,
         hidden_size: usize,
         vocab_size: usize,
-        dtype: DType,
+        _dtype: DType,
         device: &Device,
     ) -> Result<Self, candle_core::Error> {
         let varmap = VarMap::new();
-        let value_heads = ValueHeads::new(hidden_size, vocab_size, &varmap, dtype, device)
+        let value_heads = ValueHeads::new(hidden_size, vocab_size, &varmap, DType::F32, device)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 
         Ok(Self {
