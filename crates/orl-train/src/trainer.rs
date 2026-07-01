@@ -162,28 +162,15 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
         buffer.preference_pairs_len()
     );
 
-    // Create trainable model with VarMap
-    let mut varmap = VarMap::new();
-    let mut model = TrainableCausalLM::from_varmap(&model_config, &varmap, dtype, &device)?;
-
-    // Load pretrained weights
+    // Pre-populate VarMap with pretrained weights converted to F32.
+    // This must happen before model creation so that the model finds
+    // existing F32 variables instead of creating new ones.
+    let varmap = VarMap::new();
     tracing::info!("loading pretrained weights...");
-    for path in &model_files.weight_paths {
-        varmap.load(path)?;
-    }
-    // Safetensors files may store weights as BF16/F16; cast to F32 for computation
-    // since Candle's matmul does not support BF16 on all backends.
-    {
-        let data = varmap.data().lock().unwrap();
-        for (_name, var) in data.iter() {
-            let t = var.as_tensor();
-            if t.dtype() != DType::F32 {
-                let f32_t = t.to_dtype(DType::F32)?;
-                var.set(&f32_t)?;
-            }
-        }
-    }
+    loader::load_pretrained_weights(&varmap, &model_files.weight_paths, dtype, &device)?;
     tracing::info!("pretrained weights loaded and cast to F32");
+
+    let mut model = TrainableCausalLM::from_varmap(&model_config, &varmap, dtype, &device)?;
 
     let mut all_vars = varmap.all_vars();
 

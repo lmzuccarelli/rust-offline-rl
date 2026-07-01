@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use candle_core::{DType, Device};
-use candle_nn::VarBuilder;
+use candle_core::{DType, Device, Var};
+use candle_nn::{VarBuilder, VarMap};
 use candle_transformers::models::qwen3 as qwen;
 use hf_hub::api::sync::Api;
 use tokenizers::Tokenizer;
@@ -91,6 +91,29 @@ pub fn load_weights_vb<'a>(
         VarBuilder::from_mmaped_safetensors(&weight_paths, dtype, device)?
     };
     Ok(vb)
+}
+
+/// Load pretrained weights from safetensors files into a VarMap, converting
+/// to `target_dtype`. This avoids the dtype-mismatch error that
+/// `VarMap::load` triggers when the file dtype differs from the variable dtype,
+/// because `Var::set` uses an in-place `copy_strided` that requires matching dtypes.
+pub fn load_pretrained_weights(
+    varmap: &VarMap,
+    weight_paths: &[PathBuf],
+    target_dtype: DType,
+    device: &Device,
+) -> Result<(), LoadError> {
+    for path in weight_paths {
+        let safetensors = unsafe { candle_core::safetensors::MmapedSafetensors::new(path)? };
+        let mut data = varmap.data().lock().unwrap();
+        for (name, _view) in safetensors.tensors() {
+            let tensor = safetensors.load(&name, device)?;
+            let tensor = tensor.to_dtype(target_dtype)?;
+            let var = Var::from_tensor(&tensor)?;
+            data.insert(name, var);
+        }
+    }
+    Ok(())
 }
 
 pub fn parse_dtype(dtype_str: &str) -> DType {
