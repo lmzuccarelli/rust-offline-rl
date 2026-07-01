@@ -97,12 +97,9 @@ impl OfflineRLAlgorithm for Ilql {
     ) -> candle_core::Result<(Tensor, Metrics)> {
         let batch = buffer.sample_ilql_batch(self.config.batch_size, rng, device)?;
 
-        let hidden_states = model.forward_hidden(&batch.input_ids)
+        let (hidden_states, logits) = model.forward_train_with_hidden(&batch.input_ids)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
         let hidden_states = hidden_states.to_dtype(DType::F32)?;
-
-        let logits = model.forward_train(&batch.input_ids)
-            .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
         let logits = logits.to_dtype(DType::F32)?;
 
         let q_values = self.value_heads.q_values(&hidden_states)?;

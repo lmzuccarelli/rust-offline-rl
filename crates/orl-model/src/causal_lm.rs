@@ -16,6 +16,7 @@ pub struct TrainableCausalLM {
     base: qwen::Model,
     lm_head: candle_nn::Linear,
     config: qwen::Config,
+    varmap: VarMap,
     device: Device,
     dtype: DType,
 }
@@ -31,10 +32,6 @@ impl TrainableCausalLM {
         let base = qwen::Model::new(config, vb.clone())?;
 
         let lm_head = if config.tie_word_embeddings {
-            // When tying, the lm_head shares the embedding weights.
-            // We'll create a separate linear and rely on weight loading
-            // to map the correct tensors. The VarMap-based loading
-            // handles the tie by sharing the same underlying data.
             linear_no_bias(config.hidden_size, config.vocab_size, vb.pp("lm_head"))?
         } else {
             linear_no_bias(config.hidden_size, config.vocab_size, vb.pp("lm_head"))?
@@ -44,22 +41,39 @@ impl TrainableCausalLM {
             base,
             lm_head,
             config: config.clone(),
+            varmap: varmap.clone(),
             device: device.clone(),
             dtype,
         })
     }
 
+    fn reset_kv_cache(&mut self) -> Result<(), ModelError> {
+        let vb = VarBuilder::from_varmap(&self.varmap, self.dtype, &self.device);
+        self.base = qwen::Model::new(&self.config, vb)?;
+        Ok(())
+    }
+
     pub fn forward_train(&mut self, input_ids: &Tensor) -> Result<Tensor, ModelError> {
-        // Use ModelForCausalLM's clear_kv_cache equivalent
-        // Model::forward with offset=0 effectively resets position
+        self.reset_kv_cache()?;
         let hidden_states = self.base.forward(input_ids, 0)?;
         let logits = hidden_states.apply(&self.lm_head)?;
         Ok(logits)
     }
 
     pub fn forward_hidden(&mut self, input_ids: &Tensor) -> Result<Tensor, ModelError> {
+        self.reset_kv_cache()?;
         let hidden_states = self.base.forward(input_ids, 0)?;
         Ok(hidden_states)
+    }
+
+    pub fn forward_train_with_hidden(
+        &mut self,
+        input_ids: &Tensor,
+    ) -> Result<(Tensor, Tensor), ModelError> {
+        self.reset_kv_cache()?;
+        let hidden_states = self.base.forward(input_ids, 0)?;
+        let logits = hidden_states.apply(&self.lm_head)?;
+        Ok((hidden_states, logits))
     }
 
     pub fn config(&self) -> &qwen::Config {

@@ -121,7 +121,10 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
 
     // Load tokenizer
     let tokenizer = loader::load_tokenizer(&model_files.tokenizer_path)?;
-    tracing::info!("loaded tokenizer with {} vocab", tokenizer.get_vocab_size(true));
+    tracing::info!(
+        "loaded tokenizer with {} vocab",
+        tokenizer.get_vocab_size(true)
+    );
 
     // Load model config
     let model_config = loader::load_config(&model_files.config_path)?;
@@ -225,7 +228,10 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
             tracing::info!("using paged AdamW optimizer (moments on CPU)");
             OptimizerWrapper::Paged(PagedAdamW::new(all_vars, params)?)
         }
-        other => anyhow::bail!("unknown optimizer: {} (expected 'adamw' or 'paged_adamw')", other),
+        other => anyhow::bail!(
+            "unknown optimizer: {} (expected 'adamw' or 'paged_adamw')",
+            other
+        ),
     };
 
     // LR scheduler
@@ -262,10 +268,12 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
 
         for _micro in 0..config.training.gradient_accumulation_steps {
             let (loss, metrics) = algorithm.compute_loss(&mut model, &mut rng, &buffer, &device)?;
+            tracing::info!("loss {:?} : metrics {:?}", loss, metrics);
 
             // Scale loss by accumulation steps
             let scaled_loss = (&loss / config.training.gradient_accumulation_steps as f64)?;
             optimizer.backward_step(&scaled_loss)?;
+            tracing::info!("scaled loss {:?}", scaled_loss);
 
             accum_loss += loss.to_scalar::<f32>()? as f64;
             for (k, v) in metrics {
@@ -282,10 +290,7 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
         progress.set_message(format!("{:.4}", avg_loss));
 
         if step % 10 == 0 {
-            tracing::info!(
-                "step={}, loss={:.4}, lr={:.2e}",
-                step, avg_loss, lr
-            );
+            tracing::info!("step={}, loss={:.4}, lr={:.2e}", step, avg_loss, lr);
         }
 
         // Evaluation
