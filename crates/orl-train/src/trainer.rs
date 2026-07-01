@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use candle_core::{Device, Result as CandleResult, Tensor};
+use candle_core::{DType, Device, Result as CandleResult, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarMap};
 
 use crate::paged_adamw::{PagedAdamW, ParamsPagedAdamW};
@@ -112,8 +112,9 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
     let device = Device::cuda_if_available(0)?;
     tracing::info!("using device: {:?}", device);
 
-    let dtype = loader::parse_dtype(&config.model.dtype);
-    tracing::info!("using dtype: {:?}", dtype);
+    let storage_dtype = loader::parse_dtype(&config.model.dtype);
+    let dtype = DType::F32;
+    tracing::info!("model storage dtype: {:?}, compute dtype: {:?}", storage_dtype, dtype);
 
     // Download and load model files
     tracing::info!("downloading model: {}", config.model.model_id);
@@ -170,7 +171,19 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
     for path in &model_files.weight_paths {
         varmap.load(path)?;
     }
-    tracing::info!("pretrained weights loaded");
+    // Safetensors files may store weights as BF16/F16; cast to F32 for computation
+    // since Candle's matmul does not support BF16 on all backends.
+    {
+        let data = varmap.data().lock().unwrap();
+        for (_name, var) in data.iter() {
+            let t = var.as_tensor();
+            if t.dtype() != DType::F32 {
+                let f32_t = t.to_dtype(DType::F32)?;
+                var.set(&f32_t)?;
+            }
+        }
+    }
+    tracing::info!("pretrained weights loaded and cast to F32");
 
     let mut all_vars = varmap.all_vars();
 

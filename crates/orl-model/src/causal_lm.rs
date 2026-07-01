@@ -49,7 +49,9 @@ impl TrainableCausalLM {
 
     fn reset_kv_cache(&mut self) -> Result<(), ModelError> {
         let vb = VarBuilder::from_varmap(&self.varmap, self.dtype, &self.device);
-        self.base = qwen::Model::new(&self.config, vb)?;
+        self.base = qwen::Model::new(&self.config, vb.clone())?;
+        self.lm_head =
+            linear_no_bias(self.config.hidden_size, self.config.vocab_size, vb.pp("lm_head"))?;
         Ok(())
     }
 
