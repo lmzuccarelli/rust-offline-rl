@@ -154,7 +154,7 @@ fn run_generation(
     // Prefill: forward the full prompt
     let input = Tensor::new(prompt_tokens, device)?.unsqueeze(0)?;
     let logits = model.forward(&input, 0)?;
-    let logits = logits.squeeze(0)?;
+    let logits = logits.squeeze(0)?.squeeze(0)?;
 
     let mut next_token = sampler.sample(&logits)?;
     let mut output_tokens = vec![next_token];
@@ -171,7 +171,7 @@ fn run_generation(
     for i in 1..max_tokens {
         let input = Tensor::new(&[next_token], device)?.unsqueeze(0)?;
         let logits = model.forward(&input, prompt_len + i - 1)?;
-        let logits = logits.squeeze(0)?;
+        let logits = logits.squeeze(0)?.squeeze(0)?;
 
         next_token = sampler.sample(&logits)?;
 
