@@ -47,6 +47,29 @@ pub fn load_train_state(checkpoint_dir: &Path, step: usize) -> Result<TrainState
     Ok(state)
 }
 
+pub fn save_auxiliary_checkpoint(
+    varmap: &VarMap,
+    output_dir: &Path,
+    step: usize,
+) -> Result<PathBuf, CheckpointError> {
+    std::fs::create_dir_all(output_dir)?;
+
+    let path = output_dir.join(format!("checkpoint-{}-value-heads.safetensors", step));
+    varmap.save(&path)?;
+
+    tracing::info!("saved value-head checkpoint at step {} to {}", step, path.display());
+
+    Ok(path)
+}
+
+pub fn auxiliary_checkpoint_path(output_dir: &Path, step: usize) -> PathBuf {
+    output_dir.join(format!("checkpoint-{}-value-heads.safetensors", step))
+}
+
+pub fn has_auxiliary_checkpoint(output_dir: &Path, step: usize) -> bool {
+    auxiliary_checkpoint_path(output_dir, step).exists()
+}
+
 pub fn find_latest_checkpoint(output_dir: &Path) -> Option<(usize, PathBuf)> {
     let entries = std::fs::read_dir(output_dir).ok()?;
 

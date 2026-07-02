@@ -167,6 +167,10 @@ impl OfflineRLAlgorithm for Ilql {
     fn post_step(&mut self) -> candle_core::Result<()> {
         self.value_heads.update_targets(self.config.target_update_tau, &self.varmap)
     }
+
+    fn auxiliary_varmap(&self) -> Option<&VarMap> {
+        Some(&self.varmap)
+    }
 }
 
 fn expectile_loss(diff: &Tensor, tau: f32, device: &Device) -> candle_core::Result<Tensor> {

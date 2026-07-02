@@ -1,8 +1,8 @@
 [model]
-model_id = "Qwen/Qwen3-1.7B"
+model_id = "Qwen/Qwen3-0.6B"
 dtype = "bf16"
-max_prompt_length = 2048
-max_response_length = 4096
+max_prompt_length = 1024
+max_response_length = 2048
 
 [data]
 logs_dir = "logs"
@@ -11,7 +11,7 @@ prompt_truncation = "tail"
 min_reward = -1.0
 
 [training]
-algorithm = "rw_sft"
+algorithm = "ilql"
 optimizer = "paged_adamw"
 num_epochs = 3
 batch_size = 1
@@ -19,7 +19,7 @@ gradient_accumulation_steps = 8
 learning_rate = 1e-5
 warmup_steps = 50
 max_steps = 1000
-save_every = 100
+save_every = 500
 eval_every = 50
 output_dir = "checkpoints"
 seed = 42

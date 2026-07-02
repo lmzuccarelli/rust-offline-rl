@@ -312,6 +312,9 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
                     algorithm: algorithm.name().to_string(),
                 };
                 checkpoint::save_checkpoint(&varmap, &state, &output_dir, step)?;
+                if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
+                    checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, step)?;
+                }
             }
         }
 
@@ -324,6 +327,9 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
                 algorithm: algorithm.name().to_string(),
             };
             checkpoint::save_checkpoint(&varmap, &state, &output_dir, step)?;
+            if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
+                checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, step)?;
+            }
         }
     }
 
@@ -337,6 +343,9 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
         algorithm: algorithm.name().to_string(),
     };
     checkpoint::save_checkpoint(&varmap, &state, &output_dir, total_steps)?;
+    if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
+        checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, total_steps)?;
+    }
 
     tracing::info!("training complete. best eval loss: {:.4}", best_eval_loss);
 

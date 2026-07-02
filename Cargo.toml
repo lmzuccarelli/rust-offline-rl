@@ -1,6 +1,6 @@
 [package]
 name = "rust-offline-rl"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Luigi Mario Zuccarelli<>luigizuccarelli@gmail.com"]
 
@@ -26,6 +26,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 rand = "0.9"
 indicatif = "0.17"
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 
 [features]
 default = []
@@ -48,3 +50,11 @@ tracing-subscriber = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 candle-core = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+safetensors = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }
+tokenizers = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }

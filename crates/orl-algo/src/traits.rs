@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use candle_core::{Device, Tensor};
+use candle_nn::VarMap;
 use rand::rngs::StdRng;
 
 use orl_data::replay_buffer::ReplayBuffer;
@@ -21,5 +22,9 @@ pub trait OfflineRLAlgorithm {
 
     fn post_step(&mut self) -> candle_core::Result<()> {
         Ok(())
+    }
+
+    fn auxiliary_varmap(&self) -> Option<&VarMap> {
+        None
     }
 }
