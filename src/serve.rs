@@ -94,11 +94,19 @@ struct AppState {
 fn apply_chat_template(messages: &[ChatMessage], tokenizer: &tokenizers::Tokenizer) -> Vec<u32> {
     let mut prompt = String::new();
 
+    let has_system = messages.iter().any(|m| m.role == "system");
+    if !has_system {
+        prompt.push_str("<|im_start|>system\n/no_think<|im_end|>\n");
+    }
+
     for msg in messages {
         prompt.push_str("<|im_start|>");
         prompt.push_str(&msg.role);
         prompt.push('\n');
         prompt.push_str(&msg.content);
+        if msg.role == "system" {
+            prompt.push_str("\n/no_think");
+        }
         prompt.push_str("<|im_end|>\n");
     }
 
