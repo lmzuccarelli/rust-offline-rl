@@ -31,11 +31,32 @@ impl TrainableCausalLM {
         let vb = VarBuilder::from_varmap(varmap, dtype, device);
         let base = qwen::Model::new(config, vb.clone())?;
 
-        let lm_head = if config.tie_word_embeddings {
-            linear_no_bias(config.hidden_size, config.vocab_size, vb.pp("lm_head"))?
-        } else {
-            linear_no_bias(config.hidden_size, config.vocab_size, vb.pp("lm_head"))?
-        };
+        // When the pretrained model uses tied embeddings, the safetensors
+        // file may not include a separate lm_head.weight.  Seed it from
+        // the embedding so the lm_head starts from a correct
+        // initialization instead of random weights.
+        if config.tie_word_embeddings {
+            let needs_init = {
+                let data = varmap.data().lock().unwrap();
+                if !data.contains_key("lm_head.weight") {
+                    data.get("model.embed_tokens.weight")
+                        .map(|v| v.as_tensor().clone())
+                } else {
+                    None
+                }
+            };
+            if let Some(embed_tensor) = needs_init {
+                let lm_var = candle_core::Var::from_tensor(&embed_tensor)?;
+                varmap
+                    .data()
+                    .lock()
+                    .unwrap()
+                    .insert("lm_head.weight".to_string(), lm_var);
+            }
+        }
+
+        let lm_head =
+            linear_no_bias(config.hidden_size, config.vocab_size, vb.pp("lm_head"))?;
 
         Ok(Self {
             base,

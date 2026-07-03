@@ -299,8 +299,14 @@ pub async fn run_server(
     tracing::info!("using device: {:?}", device);
 
     let model_files = loader::download_model(&config.model.model_id)?;
-    let model_config = loader::load_config(&model_files.config_path)?;
+    let mut model_config = loader::load_config(&model_files.config_path)?;
     let tokenizer = loader::load_tokenizer(&model_files.tokenizer_path)?;
+
+    // Training saves lm_head as an independent parameter even when the
+    // pretrained model uses tied embeddings.  Force the flag off so that
+    // ModelForCausalLM loads the trained lm_head.weight from the checkpoint
+    // instead of silently tying it back to embed_tokens.
+    model_config.tie_word_embeddings = false;
 
     tracing::info!("loading checkpoint weights...");
     let vb = unsafe {
