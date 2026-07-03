@@ -114,7 +114,11 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
 
     let storage_dtype = loader::parse_dtype(&config.model.dtype);
     let dtype = DType::F32;
-    tracing::info!("model storage dtype: {:?}, compute dtype: {:?}", storage_dtype, dtype);
+    tracing::info!(
+        "model storage dtype: {:?}, compute dtype: {:?}",
+        storage_dtype,
+        dtype
+    );
 
     // Download and load model files
     tracing::info!("downloading model: {}", config.model.model_id);
@@ -305,16 +309,16 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
 
             if eval_metrics.eval_loss < best_eval_loss {
                 best_eval_loss = eval_metrics.eval_loss;
-                let state = TrainState {
-                    global_step: step,
-                    epoch: step / buffer.train_len().max(1),
-                    best_eval_loss,
-                    algorithm: algorithm.name().to_string(),
-                };
-                checkpoint::save_checkpoint(&varmap, &state, &output_dir, step)?;
-                if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
-                    checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, step)?;
-                }
+                //let state = TrainState {
+                //    global_step: step,
+                //    epoch: step / buffer.train_len().max(1),
+                //    best_eval_loss,
+                //    algorithm: algorithm.name().to_string(),
+                //};
+                // checkpoint::save_checkpoint(&varmap, &state, &output_dir, step)?;
+                //if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
+                //    checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, step)?;
+                //}
             }
         }
 
