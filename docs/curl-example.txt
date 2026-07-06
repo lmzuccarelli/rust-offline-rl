@@ -1,0 +1,1 @@
+ curl -d '{ "messages": [{"role": "system", "content": "You are a helpful CUDA code assistant."},{"role": "user", "content": "Generate optimized cuda code for square matrix multiplication"}],"temperature": 0.2,"top_p": 0.8,"max_tokens": 4096,"seed": 42}' -H "Content-Type: application/json" http://optiplex-ai:8080/v1/chat/completions
