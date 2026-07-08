@@ -238,8 +238,29 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
         ),
     };
 
-    // LR scheduler
-    let total_steps = config.training.max_steps;
+    let mut rng = StdRng::seed_from_u64(config.training.seed);
+    let output_dir = PathBuf::from(&config.training.output_dir);
+
+    let mut best_eval_loss = f64::INFINITY;
+
+    let effective_batch = config.training.batch_size * config.training.gradient_accumulation_steps;
+    let steps_per_epoch = (buffer.train_len() + effective_batch - 1) / effective_batch.max(1);
+    let epoch_total_steps = config.training.num_epochs * steps_per_epoch;
+    let total_steps = if config.training.max_steps > 0 {
+        epoch_total_steps.min(config.training.max_steps)
+    } else {
+        epoch_total_steps
+    };
+
+    tracing::info!(
+        "epochs={}, steps_per_epoch={}, total_steps={} (max_steps cap={})",
+        config.training.num_epochs,
+        steps_per_epoch,
+        total_steps,
+        config.training.max_steps
+    );
+
+    // Recompute scheduler with epoch-derived total
     let mut scheduler = LrScheduler::new(
         config.training.scheduler.clone(),
         config.training.learning_rate,
@@ -247,93 +268,104 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
         total_steps,
     );
 
-    let mut rng = StdRng::seed_from_u64(config.training.seed);
-    let output_dir = PathBuf::from(&config.training.output_dir);
-
-    let mut best_eval_loss = f64::INFINITY;
-
     // Progress bar
     let progress = indicatif::ProgressBar::new(total_steps as u64);
     progress.set_style(
         indicatif::ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:50} {pos}/{len} loss={msg}")
+            .template("[{elapsed_precise}] {bar:50} {pos}/{len} epoch={prefix} loss={msg}")
             .unwrap(),
     );
 
     tracing::info!("starting training with algorithm: {}", algorithm.name());
 
-    for step in 0..total_steps {
-        let lr = scheduler.step();
-        optimizer.set_learning_rate(lr);
+    let mut global_step: usize = 0;
 
-        // Gradient accumulation
-        let mut accum_loss = 0.0f64;
-        let mut accum_metrics = std::collections::HashMap::new();
+    for epoch in 0..config.training.num_epochs {
+        tracing::info!("=== epoch {}/{} ===", epoch + 1, config.training.num_epochs);
+        progress.set_prefix(format!("{}/{}", epoch + 1, config.training.num_epochs));
 
-        for _micro in 0..config.training.gradient_accumulation_steps {
-            let (loss, metrics) = algorithm.compute_loss(&mut model, &mut rng, &buffer, &device)?;
-            tracing::info!("loss {:?} : metrics {:?}", loss, metrics);
-
-            // Scale loss by accumulation steps
-            let scaled_loss = (&loss / config.training.gradient_accumulation_steps as f64)?;
-            optimizer.backward_step(&scaled_loss)?;
-            tracing::info!("scaled loss {:?}", scaled_loss);
-
-            accum_loss += loss.to_scalar::<f32>()? as f64;
-            for (k, v) in metrics {
-                *accum_metrics.entry(k).or_insert(0.0) += v;
+        for _epoch_step in 0..steps_per_epoch {
+            if global_step >= total_steps {
+                break;
             }
+
+            let lr = scheduler.step();
+            optimizer.set_learning_rate(lr);
+
+            // Gradient accumulation
+            let mut accum_loss = 0.0f64;
+            let mut accum_metrics = std::collections::HashMap::new();
+
+            for _micro in 0..config.training.gradient_accumulation_steps {
+                let (loss, metrics) =
+                    algorithm.compute_loss(&mut model, &mut rng, &buffer, &device)?;
+                tracing::info!("loss {:?} : metrics {:?}", loss, metrics);
+
+                // Scale loss by accumulation steps
+                let scaled_loss =
+                    (&loss / config.training.gradient_accumulation_steps as f64)?;
+                optimizer.backward_step(&scaled_loss)?;
+                tracing::info!("scaled loss {:?}", scaled_loss);
+
+                accum_loss += loss.to_scalar::<f32>()? as f64;
+                for (k, v) in metrics {
+                    *accum_metrics.entry(k).or_insert(0.0) += v;
+                }
+            }
+
+            let avg_loss = accum_loss / config.training.gradient_accumulation_steps as f64;
+
+            // Post-step updates (e.g., ILQL target network update)
+            algorithm.post_step()?;
+
+            progress.set_position(global_step as u64);
+            progress.set_message(format!("{:.4}", avg_loss));
+
+            if global_step % 10 == 0 {
+                tracing::info!(
+                    "epoch={}, step={}, global_step={}, loss={:.4}, lr={:.2e}",
+                    epoch + 1,
+                    _epoch_step,
+                    global_step,
+                    avg_loss,
+                    lr
+                );
+            }
+
+            // Evaluation
+            if global_step > 0 && global_step % config.training.eval_every == 0 {
+                let eval_metrics = eval::evaluate(&mut model, &buffer, &device)?;
+                tracing::info!(
+                    "eval: loss={:.4}, perplexity={:.2}, examples={}",
+                    eval_metrics.eval_loss,
+                    eval_metrics.perplexity,
+                    eval_metrics.num_examples
+                );
+
+                if eval_metrics.eval_loss < best_eval_loss {
+                    best_eval_loss = eval_metrics.eval_loss;
+                }
+            }
+
+            // Periodic checkpoint
+            if global_step > 0 && global_step % config.training.save_every == 0 {
+                let state = TrainState {
+                    global_step,
+                    epoch,
+                    best_eval_loss,
+                    algorithm: algorithm.name().to_string(),
+                };
+                checkpoint::save_checkpoint(&varmap, &state, &output_dir, global_step)?;
+                if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
+                    checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, global_step)?;
+                }
+            }
+
+            global_step += 1;
         }
 
-        let avg_loss = accum_loss / config.training.gradient_accumulation_steps as f64;
-
-        // Post-step updates (e.g., ILQL target network update)
-        algorithm.post_step()?;
-
-        progress.set_position(step as u64);
-        progress.set_message(format!("{:.4}", avg_loss));
-
-        if step % 10 == 0 {
-            tracing::info!("step={}, loss={:.4}, lr={:.2e}", step, avg_loss, lr);
-        }
-
-        // Evaluation
-        if step > 0 && step % config.training.eval_every == 0 {
-            let eval_metrics = eval::evaluate(&mut model, &buffer, &device)?;
-            tracing::info!(
-                "eval: loss={:.4}, perplexity={:.2}, examples={}",
-                eval_metrics.eval_loss,
-                eval_metrics.perplexity,
-                eval_metrics.num_examples
-            );
-
-            if eval_metrics.eval_loss < best_eval_loss {
-                best_eval_loss = eval_metrics.eval_loss;
-                //let state = TrainState {
-                //    global_step: step,
-                //    epoch: step / buffer.train_len().max(1),
-                //    best_eval_loss,
-                //    algorithm: algorithm.name().to_string(),
-                //};
-                // checkpoint::save_checkpoint(&varmap, &state, &output_dir, step)?;
-                //if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
-                //    checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, step)?;
-                //}
-            }
-        }
-
-        // Periodic checkpoint
-        if step > 0 && step % config.training.save_every == 0 {
-            let state = TrainState {
-                global_step: step,
-                epoch: step / buffer.train_len().max(1),
-                best_eval_loss,
-                algorithm: algorithm.name().to_string(),
-            };
-            checkpoint::save_checkpoint(&varmap, &state, &output_dir, step)?;
-            if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
-                checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, step)?;
-            }
+        if global_step >= total_steps {
+            break;
         }
     }
 
@@ -341,14 +373,14 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
 
     // Final checkpoint
     let state = TrainState {
-        global_step: total_steps,
-        epoch: total_steps / buffer.train_len().max(1),
+        global_step,
+        epoch: config.training.num_epochs,
         best_eval_loss,
         algorithm: algorithm.name().to_string(),
     };
-    checkpoint::save_checkpoint(&varmap, &state, &output_dir, total_steps)?;
+    checkpoint::save_checkpoint(&varmap, &state, &output_dir, global_step)?;
     if let Some(aux_varmap) = algorithm.auxiliary_varmap() {
-        checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, total_steps)?;
+        checkpoint::save_auxiliary_checkpoint(aux_varmap, &output_dir, global_step)?;
     }
 
     tracing::info!("training complete. best eval loss: {:.4}", best_eval_loss);
