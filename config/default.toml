@@ -1,8 +1,8 @@
 [model]
-model_id = "Qwen/Qwen3-0.6B"
+model_id = "Qwen/Qwen3-4B"
 dtype = "bf16"
-max_prompt_length = 1024
-max_response_length = 2048
+max_prompt_length = 256
+max_response_length = 512
 
 [data]
 logs_dir = "logs"
@@ -13,13 +13,13 @@ min_reward = -1.0
 [training]
 algorithm = "ilql"
 optimizer = "paged_adamw"
-num_epochs = 3
+num_epochs = 500
 batch_size = 1
-gradient_accumulation_steps = 8
+gradient_accumulation_steps = 1
 learning_rate = 1e-5
 warmup_steps = 50
 max_steps = 1000
-save_every = 500
+save_every = 1000
 eval_every = 100
 output_dir = "checkpoints"
 seed = 42
