@@ -60,11 +60,11 @@ impl Ilql {
         config: IlqlConfig,
         hidden_size: usize,
         vocab_size: usize,
-        _dtype: DType,
+        dtype: DType,
         device: &Device,
     ) -> Result<Self, candle_core::Error> {
         let varmap = VarMap::new();
-        let value_heads = ValueHeads::new(hidden_size, vocab_size, &varmap, DType::F32, device)
+        let value_heads = ValueHeads::new(hidden_size, vocab_size, &varmap, dtype, device)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
 
         Ok(Self {
@@ -99,12 +99,11 @@ impl OfflineRLAlgorithm for Ilql {
 
         let (hidden_states, logits) = model.forward_train_with_hidden(&batch.input_ids)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let hidden_states = hidden_states.to_dtype(DType::F32)?;
         let logits = logits.to_dtype(DType::F32)?;
 
-        let q_values = self.value_heads.q_values(&hidden_states)?;
-        let v_values = self.value_heads.v_values(&hidden_states)?;
-        let target_v_values = self.value_heads.target_v_values(&hidden_states.detach())?;
+        let q_values = self.value_heads.q_values(&hidden_states)?.to_dtype(DType::F32)?;
+        let v_values = self.value_heads.v_values(&hidden_states)?.to_dtype(DType::F32)?;
+        let target_v_values = self.value_heads.target_v_values(&hidden_states.detach())?.to_dtype(DType::F32)?;
 
         let (_batch_size, seq_len, vocab_size) = q_values.dims3()?;
 

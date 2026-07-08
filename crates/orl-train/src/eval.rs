@@ -35,7 +35,7 @@ pub fn evaluate(
 
         let logits = model.forward_train(&batch.input_ids)
             .map_err(|e| candle_core::Error::Msg(e.to_string()))?;
-        let logits = logits.to_dtype(DType::F32)?;
+        let logits = logits.detach().to_dtype(DType::F32)?;
 
         let (_, seq_len, vocab_size) = logits.dims3()?;
         let shift_logits = logits.narrow(1, 0, seq_len - 1)?;

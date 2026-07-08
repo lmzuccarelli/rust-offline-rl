@@ -1,4 +1,4 @@
-use candle_core::{Device, Result, Tensor, Var};
+use candle_core::{DType, Device, Result, Tensor, Var};
 
 #[derive(Clone, Debug)]
 pub struct ParamsPagedAdamW {
@@ -44,11 +44,10 @@ impl PagedAdamW {
             .into_iter()
             .filter(|var| var.dtype().is_float())
             .map(|var| {
-                let dtype = var.dtype();
                 let shape = var.shape();
                 let device = var.device().clone();
-                let first_moment = Tensor::zeros(shape, dtype, &Device::Cpu)?;
-                let second_moment = Tensor::zeros(shape, dtype, &Device::Cpu)?;
+                let first_moment = Tensor::zeros(shape, DType::F32, &Device::Cpu)?;
+                let second_moment = Tensor::zeros(shape, DType::F32, &Device::Cpu)?;
                 Ok(VarState {
                     var,
                     first_moment,
@@ -90,21 +89,28 @@ impl PagedAdamW {
         for state in self.vars.iter_mut() {
             if let Some(g) = grads.get(&state.var) {
                 let dev = &state.device;
+                let param_dtype = state.var.dtype();
 
-                // Page in: move moments from CPU to compute device
+                // Page in: move F32 moments from CPU to compute device
                 let m = state.first_moment.to_device(dev)?;
                 let v = state.second_moment.to_device(dev)?;
 
-                let next_m = ((&m * beta1)? + (g * (1.0 - beta1))?)?;
-                let next_v = ((&v * beta2)? + (g.sqr()? * (1.0 - beta2))?)?;
+                // Cast gradient and params to F32 for numerically stable update
+                let g_f32 = g.to_dtype(DType::F32)?;
+                let theta_f32 = state.var.as_tensor().to_dtype(DType::F32)?;
+
+                let next_m = ((&m * beta1)? + (&g_f32 * (1.0 - beta1))?)?;
+                let next_v = ((&v * beta2)? + (g_f32.sqr()? * (1.0 - beta2))?)?;
                 let m_hat = (&next_m * scale_m)?;
                 let v_hat = (&next_v * scale_v)?;
-                let next_theta = (state.var.as_tensor() * (1f64 - lr_lambda))?;
+                let next_theta = (&theta_f32 * (1f64 - lr_lambda))?;
                 let adjusted_grad = (m_hat / (v_hat.sqrt()? + self.params.eps)?)?;
                 let next_theta = (next_theta - (adjusted_grad * lr)?)?;
-                state.var.set(&next_theta)?;
 
-                // Page out: move moments back to CPU
+                // Cast back to param dtype and set
+                state.var.set(&next_theta.to_dtype(param_dtype)?)?;
+
+                // Page out: F32 moments back to CPU
                 state.first_moment = next_m.to_device(&Device::Cpu)?;
                 state.second_moment = next_v.to_device(&Device::Cpu)?;
             }

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use candle_core::{DType, Device, Result as CandleResult, Tensor};
+use candle_core::{Device, Result as CandleResult, Tensor};
 use candle_nn::{AdamW, Optimizer, ParamsAdamW, VarMap};
 
 use crate::paged_adamw::{PagedAdamW, ParamsPagedAdamW};
@@ -112,13 +112,8 @@ pub fn train(config: FullConfig) -> anyhow::Result<()> {
     let device = Device::cuda_if_available(0)?;
     tracing::info!("using device: {:?}", device);
 
-    let storage_dtype = loader::parse_dtype(&config.model.dtype);
-    let dtype = DType::F32;
-    tracing::info!(
-        "model storage dtype: {:?}, compute dtype: {:?}",
-        storage_dtype,
-        dtype
-    );
+    let dtype = loader::parse_dtype(&config.model.dtype);
+    tracing::info!("compute dtype: {:?}", dtype);
 
     // Download and load model files
     tracing::info!("downloading model: {}", config.model.model_id);
